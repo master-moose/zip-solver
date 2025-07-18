@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Optional: set this to the absolute base URL of your backend when
+         hosting the frontend as a static site (e.g. GitHub Pages). If left
+         empty the app assumes the backend lives under the same origin. -->
+    <meta name="backend-url" content="">
+    <title>LinkedIn Zip Solver</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --grid-cell-size: 60px;
+            --grid-border-width: 2px;
+            --wall-width: 4px;
+        }
+
+        .grid-container {
+            display: inline-block;
+            border: 2px solid var(--bs-border-color);
+            border-radius: 8px;
+            padding: 10px;
+            background: var(--bs-body-bg);
+        }
+
+        .grid {
+            display: grid;
+            gap: 0;
+            border: 1px solid var(--bs-border-color);
+        }
+
+        .cell {
+            position: relative;
+            width: var(--grid-cell-size);
+            height: var(--grid-cell-size);
+            border: 1px solid var(--bs-border-color-translucent);
+            box-sizing: border-box;
+            background: var(--bs-body-bg);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            transition: all 0.2s ease;
+        }
+
+        .cell:hover:not(.wall-mode) {
+            background: var(--bs-secondary-bg);
+        }
+
+        .cell.wall-mode {
+            cursor: default;
+        }
+
+        .cell.number-mode {
+            cursor: pointer;
+        }
+
+        .cell.number-mode:hover {
+            background: var(--bs-primary-bg-subtle);
+            transform: scale(1.02);
+        }
+
+        .cell.solution-path {
+            background: linear-gradient(45deg, #ffc107, #ffeb3b) !important;
+            color: #000;
+        }
+
+        .cell.solution-start {
+            background: linear-gradient(45deg, #28a745, #20c997) !important;
+            color: #fff;
+        }
+
+        .cell.solution-end {
+            background: linear-gradient(45deg, #dc3545, #e74c3c) !important;
+            color: #fff;
+        }
+
+        .cell-number {
+            position: relative;
+            z-index: 3;
+            width: 70%;
+            height: 70%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #fff;
+            background: var(--bs-primary);
+            border-radius: 50%;
+            font-size: 1.1em;
+        }
+
+        .cell-input {
+            position: absolute;
+            z-index: 5;
+            width: 70%;
+            height: 70%;
+            top: 15%;
+            left: 15%;
+            text-align: center;
+            font-size: 1.1em;
+            font-weight: bold;
+            border: 2px solid var(--bs-primary);
+            border-radius: 50%;
+            background: var(--bs-body-bg);
+            color: var(--bs-body-color);
+            outline: none;
+            display: none;
+            box-sizing: border-box;
+        }
+
+        .cell-input:focus {
+            border-color: var(--bs-primary);
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+
+        /* Hide number input spinners */
+        .cell-input::-webkit-outer-spin-button,
+        .cell-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .cell-input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .solution-step {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.7em;
+            color: #000;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+            z-index: 4;
+        }
+
+        .wall {
+            position: absolute;
+            background: var(--bs-danger);
+            z-index: 2;
+            transition: all 0.2s ease;
+        }
+
+        .wall.active {
+            background: var(--bs-danger);
+            opacity: 0.9;
+        }
+
+        .wall.inactive {
+            background: transparent;
+            border: 1px dashed var(--bs-border-color);
+        }
+
+        .wall.top {
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: var(--wall-width);
+        }
+
+        .wall.bottom {
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: var(--wall-width);
+        }
+
+        .wall.left {
+            left: 0;
+            top: 0;
+            width: var(--wall-width);
+            height: 100%;
+        }
+
+        .wall.right {
+            right: 0;
+            top: 0;
+            width: var(--wall-width);
+            height: 100%;
+        }
+
+        /* Enhanced click areas for walls in wall mode */
+        .wall-click-area {
+            position: absolute;
+            z-index: 3;
+            cursor: pointer;
+            background: transparent;
+            transition: background 0.2s ease;
+        }
+
+        .wall-click-area:hover {
+            background: rgba(220, 53, 69, 0.2);
+        }
+
+        .wall-click-area.top {
+            top: -8px;
+            left: 0;
+            width: 100%;
+            height: 16px;
+        }
+
+        .wall-click-area.bottom {
+            bottom: -8px;
+            left: 0;
+            width: 100%;
+            height: 16px;
+        }
+
+        .wall-click-area.left {
+            left: -8px;
+            top: 0;
+            width: 16px;
+            height: 100%;
+        }
+
+        .wall-click-area.right {
+            right: -8px;
+            top: 0;
+            width: 16px;
+            height: 100%;
+        }
+
+        /* Visual feedback for active mode */
+        .cell.wall-mode::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 193, 7, 0.1);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .cell.number-mode::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(13, 110, 253, 0.05);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .mode-selector {
+            background: var(--bs-secondary-bg);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn-group-mode .btn {
+            min-width: 120px;
+        }
+
+        .stats-card {
+            background: var(--bs-secondary-bg);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .solution-path-display {
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--bs-dark);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .grid-size-control {
+            max-width: 100px;
+        }
+
+        .alert {
+            margin-top: 15px;
+        }
+
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button class="btn btn-outline-secondary" id="theme-toggle" title="Toggle theme">
+            <i class="bi bi-moon-stars" id="theme-icon"></i>
+        </button>
+    </div>
+
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="bi bi-grid-3x3"></i>
+                    LinkedIn Zip Solver
+                </h1>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-4 col-md-5">
+                <!-- Controls -->
+                <div class="mode-selector">
+                    <h5><i class="bi bi-tools"></i> Edit Mode</h5>
+                    <div class="btn-group btn-group-mode w-100" role="group">
+                        <input type="radio" class="btn-check" name="edit-mode" id="mode-number" checked>
+                        <label class="btn btn-outline-primary" for="mode-number">
+                            <i class="bi bi-123"></i> Numbers
+                        </label>
+                        <input type="radio" class="btn-check" name="edit-mode" id="mode-wall">
+                        <label class="btn btn-outline-warning" for="mode-wall">
+                            <i class="bi bi-bricks"></i> Walls
+                        </label>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        <span id="mode-help-text">
+                            <i class="bi bi-info-circle"></i> Click cells to edit numbers
+                        </span>
+                    </small>
+                </div>
+
+                <!-- Grid Settings -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-gear"></i> Grid Settings</h5>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label for="grid-size-input" class="form-label">Grid Size</label>
+                                <input type="number" class="form-control grid-size-control" id="grid-size-input" value="6" min="3" max="10">
+                            </div>
+                            <div class="col-6 d-flex align-items-end">
+                                <button class="btn btn-secondary" id="update-grid-size">
+                                    <i class="bi bi-arrow-clockwise"></i> Update
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-play-circle"></i> Actions</h5>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success" id="solve-grid">
+                                <i class="bi bi-puzzle"></i> Solve Grid
+                                <span class="spinner-border spinner-border-sm d-none" id="solve-spinner"></span>
+                            </button>
+                            <button class="btn btn-warning" id="clear-solution">
+                                <i class="bi bi-eraser"></i> Clear Solution
+                            </button>
+                            <button class="btn btn-danger" id="clear-grid">
+                                <i class="bi bi-trash"></i> Clear Grid
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Solution Info -->
+                <div class="alert alert-success d-none" id="solution-info">
+                    <h6><i class="bi bi-check-circle"></i> Solution Found!</h6>
+                    <p class="mb-1" id="solution-message"></p>
+                    <small class="text-muted">Path coordinates:</small>
+                    <div class="solution-path-display mt-2" id="solution-path"></div>
+                </div>
+
+                <!-- Error Info -->
+                <div class="alert alert-danger d-none" id="error-info">
+                    <h6><i class="bi bi-exclamation-triangle"></i> Error</h6>
+                    <p class="mb-0" id="error-message"></p>
+                </div>
+            </div>
+
+            <div class="col-lg-8 col-md-7">
+                <!-- Grid and Solution -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="text-center">
+                            <h5><i class="bi bi-pencil-square"></i> Input Grid</h5>
+                            <div class="grid-container">
+                                <div id="grid" class="grid"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-center">
+                            <h5><i class="bi bi-check-circle"></i> Solution Path</h5>
+                            <div class="grid-container">
+                                <img id="solution-image" class="img-fluid rounded" style="max-width: 100%; display: none;" alt="Solution Path">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-card">
+                    <h6><i class="bi bi-bar-chart"></i> Grid Statistics</h6>
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="h4 text-primary" id="stat-numbers">0</div>
+                            <small class="text-muted">Numbers</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h4 text-warning" id="stat-walls">0</div>
+                            <small class="text-muted">Walls</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h4 text-success" id="stat-solution">0</div>
+                            <small class="text-muted">Solution Steps</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        /* ------------------------------------------------------------
+           In-browser Hamiltonian path solver  (no backend needed)
+           ------------------------------------------------------------ */
+
+        // Helper: bit index for ≤ 10×10 board (uses BigInt)
+        function bit(r, c, size) {
+            return 1n << BigInt(r * size + c);
+        }
+
+        function getValidNeighborsJS(r, c, size, data) {
+            const dirs = [];
+            const cell = data[`${r},${c}`];
+            if (!cell) return dirs;
+
+            // Left
+            if (c > 0 && !cell.borders.left) dirs.push([r, c - 1]);
+            // Up
+            if (r > 0 && !cell.borders.top) dirs.push([r - 1, c]);
+            // Right
+            if (c < size - 1 && !cell.borders.right) dirs.push([r, c + 1]);
+            // Down
+            if (r < size - 1 && !cell.borders.bottom) dirs.push([r + 1, c]);
+            return dirs;
+        }
+
+        function solveHamiltonian(size, data) {
+            // Collect numbered cells
+            const numbered = [];
+            Object.keys(data).forEach(key => {
+                const cell = data[key];
+                if (cell.value) {
+                    const [r, c] = key.split(',').map(Number);
+                    numbered.push({ pos: [r, c], value: parseInt(cell.value, 10) });
+                }
+            });
+
+            if (numbered.length === 0) return [];
+
+            numbered.sort((a, b) => a.value - b.value);
+            const start = numbered[0].pos;
+            const mustVisit = numbered.slice(1).map(o => o.pos);
+
+            const fullMask = (1n << BigInt(size * size)) - 1n;
+
+            // BFS queue
+            const queue = [];
+            queue.push({ r: start[0], c: start[1], mask: bit(start[0], start[1], size), idx: 0, path: [start] });
+            const seen = new Set();
+
+            while (queue.length) {
+                const state = queue.shift();
+                const key = `${state.r},${state.c},${state.mask.toString()},${state.idx}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                if (state.mask === fullMask && state.idx === mustVisit.length) {
+                    return state.path;
+                }
+
+                const nextRequired = state.idx < mustVisit.length ? mustVisit[state.idx] : null;
+
+                for (const [nr, nc] of getValidNeighborsJS(state.r, state.c, size, data)) {
+                    const b = bit(nr, nc, size);
+                    if (state.mask & b) continue; // visited
+
+                    const cellVal = data[`${nr},${nc}`].value ? parseInt(data[`${nr},${nc}`].value, 10) : null;
+                    let nextIdx = state.idx;
+                    if (cellVal !== null) {
+                        if (nextRequired && nr === nextRequired[0] && nc === nextRequired[1]) {
+                            nextIdx = state.idx + 1;
+                        } else if (nextRequired) {
+                            continue; // wrong order
+                        }
+                    }
+
+                    queue.push({
+                        r: nr,
+                        c: nc,
+                        mask: state.mask | b,
+                        idx: nextIdx,
+                        path: [...state.path, [nr, nc]]
+                    });
+                }
+            }
+            return [];
+        }
+ 
+        let GRID_SIZE = 6;
+        let gridData = createGridData(GRID_SIZE);
+        let currentSolution = null;
+        let editMode = 'number'; // 'number' or 'wall'
+
+        // Theme toggle
+        document.getElementById('theme-toggle').addEventListener('click', function() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-bs-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-bs-theme', newTheme);
+            
+            const icon = document.getElementById('theme-icon');
+            icon.className = newTheme === 'dark' ? 'bi bi-moon-stars' : 'bi bi-sun';
+        });
+
+        // Edit mode toggle
+        document.querySelectorAll('input[name="edit-mode"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                editMode = this.id === 'mode-number' ? 'number' : 'wall';
+                
+                // Update help text
+                const helpText = document.getElementById('mode-help-text');
+                if (editMode === 'number') {
+                    helpText.innerHTML = '<i class="bi bi-info-circle"></i> Click cells to edit numbers';
+                } else {
+                    helpText.innerHTML = '<i class="bi bi-info-circle"></i> Click wall edges to toggle walls';
+                }
+                
+                renderGrid(); // Re-render to update UI for new mode
+            });
+        });
+
+        // Create grid data based on size
+        function createGridData(size) {
+            const data = {};
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    data[`${r},${c}`] = { 
+                        value: '', 
+                        borders: { top: false, right: false, bottom: false, left: false } 
+                    };
+                }
+            }
+            return data;
+        }
+
+        function updateStats() {
+            let numbers = 0;
+            let walls = 0;
+            
+            for (const key in gridData) {
+                const cell = gridData[key];
+                if (cell.value) numbers++;
+                if (cell.borders.top || cell.borders.right || cell.borders.bottom || cell.borders.left) walls++;
+            }
+            
+            document.getElementById('stat-numbers').textContent = numbers;
+            document.getElementById('stat-walls').textContent = walls;
+            document.getElementById('stat-solution').textContent = currentSolution ? currentSolution.length : 0;
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            grid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, var(--grid-cell-size))`;
+            grid.style.gridTemplateRows = `repeat(${GRID_SIZE}, var(--grid-cell-size))`;
+            grid.innerHTML = '';
+            
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cellKey = `${r},${c}`;
+                    const cellData = gridData[cellKey];
+                    const cell = document.createElement('div');
+                    cell.className = editMode === 'wall' ? 'cell wall-mode' : 'cell number-mode';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+
+                    // Add solution path styling if solution exists
+                    if (currentSolution) { // overlay solution path
+                        const pathIndex = currentSolution.findIndex(coord => coord[0] === r && coord[1] === c);
+                        if (pathIndex !== -1) {
+                            if (pathIndex === 0) {
+                                cell.classList.add('solution-start');
+                            } else if (pathIndex === currentSolution.length - 1) {
+                                cell.classList.add('solution-end');
+                            } else {
+                                cell.classList.add('solution-path');
+                            }
+                            // Add solution step number
+                            const stepNumber = document.createElement('div');
+                            stepNumber.className = 'solution-step';
+                            stepNumber.textContent = pathIndex + 1;
+                            cell.appendChild(stepNumber);
+                        }
+                    }
+
+                    // Walls - check for shared walls with neighbors
+                    ['top', 'right', 'bottom', 'left'].forEach(dir => {
+                        let hasWall = cellData.borders[dir];
+                        
+                        // Check neighbor walls for shared walls
+                        if (!hasWall) {
+                            if (dir === 'left' && c > 0) {
+                                const neighborKey = `${r},${c-1}`;
+                                if (gridData[neighborKey] && gridData[neighborKey].borders.right) hasWall = true;
+                            }
+                            if (dir === 'top' && r > 0) {
+                                const neighborKey = `${r-1},${c}`;
+                                if (gridData[neighborKey] && gridData[neighborKey].borders.bottom) hasWall = true;
+                            }
+                            if (dir === 'right' && c < GRID_SIZE - 1) {
+                                const neighborKey = `${r},${c+1}`;
+                                if (gridData[neighborKey] && gridData[neighborKey].borders.left) hasWall = true;
+                            }
+                            if (dir === 'bottom' && r < GRID_SIZE - 1) {
+                                const neighborKey = `${r+1},${c}`;
+                                if (gridData[neighborKey] && gridData[neighborKey].borders.top) hasWall = true;
+                            }
+                        }
+                        
+                        // Create visual wall
+                        const wall = document.createElement('div');
+                        wall.className = `wall ${dir} ${hasWall ? 'active' : 'inactive'}`;
+                        cell.appendChild(wall);
+                        
+                        // Create enhanced click area for wall mode
+                        if (editMode === 'wall') {
+                            const wallClickArea = document.createElement('div');
+                            wallClickArea.className = `wall-click-area ${dir}`;
+                            wallClickArea.onclick = (e) => {
+                                e.stopPropagation();
+                                // Toggle wall on both sides
+                                const newState = !cellData.borders[dir];
+                                cellData.borders[dir] = newState;
+                                
+                                // Update neighbor cell's corresponding wall
+                                if (dir === 'left' && c > 0) {
+                                    const neighborKey = `${r},${c-1}`;
+                                    if (gridData[neighborKey]) gridData[neighborKey].borders.right = newState;
+                                }
+                                if (dir === 'top' && r > 0) {
+                                    const neighborKey = `${r-1},${c}`;
+                                    if (gridData[neighborKey]) gridData[neighborKey].borders.bottom = newState;
+                                }
+                                if (dir === 'right' && c < GRID_SIZE - 1) {
+                                    const neighborKey = `${r},${c+1}`;
+                                    if (gridData[neighborKey]) gridData[neighborKey].borders.left = newState;
+                                }
+                                if (dir === 'bottom' && r < GRID_SIZE - 1) {
+                                    const neighborKey = `${r+1},${c}`;
+                                    if (gridData[neighborKey]) gridData[neighborKey].borders.top = newState;
+                                }
+                                
+                                renderGrid();
+                                updateStats();
+                            };
+                            cell.appendChild(wallClickArea);
+                        }
+                    });
+
+                    // Number display
+                    if (cellData.value) {
+                        const num = document.createElement('div');
+                        num.className = 'cell-number';
+                        num.textContent = cellData.value;
+                        cell.appendChild(num);
+                    }
+
+                    // Input field for number editing
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.className = 'cell-input';
+                    input.min = '1';
+                    input.max = '99';
+                    input.value = cellData.value || '';
+                    
+                    // Handle input events
+                    input.addEventListener('blur', function() {
+                        const newValue = this.value.trim();
+                        cellData.value = newValue;
+                        input.style.display = 'none';
+                        renderGrid();
+                        updateStats();
+                    });
+                    
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            this.blur();
+                        }
+                        if (e.key === 'Escape') {
+                            this.value = cellData.value || '';
+                            this.blur();
+                        }
+                    });
+                    
+                    cell.appendChild(input);
+
+                    // Click cell to edit number (only in number mode)
+                    if (editMode === 'number') {
+                        cell.onclick = function(e) {
+                            e.stopPropagation();
+                            input.value = cellData.value || '';
+                            input.style.display = 'block';
+                            input.focus();
+                            input.select();
+                        };
+                    }
+
+                    grid.appendChild(cell);
+                }
+            }
+            updateStats();
+        }
+
+        renderGrid();
+
+                 // Grid size update
+         document.getElementById('update-grid-size').addEventListener('click', function() {
+             const size = parseInt(document.getElementById('grid-size-input').value);
+             if (isNaN(size) || size < 3 || size > 10) {
+                 alert('Grid size must be between 3 and 10');
+                 return;
+             }
+             GRID_SIZE = size;
+             gridData = createGridData(GRID_SIZE);
+             currentSolution = null;
+             document.getElementById('solution-info').classList.add('d-none');
+             document.getElementById('error-info').classList.add('d-none');
+             
+             // Hide solution image
+             const solutionImg = document.getElementById('solution-image');
+             solutionImg.style.display = 'none';
+             
+             renderGrid();
+         });
+
+                 // Generate Python grid function
+         function generatePythonGrid() {
+             let pythonGrid = "grid = {\n";
+             const lines = [];
+             for (const key in gridData) {
+                 const [r, c] = key.split(',');
+                 const cell = gridData[key];
+                 const borders = cell.borders;
+                 
+                 // Only include cells that have values or walls
+                 if (cell.value || borders.left || borders.top || borders.right || borders.bottom) {
+                     let line = `    (${r},${c}): Point(`;
+                     const args = [];
+                     
+                     if (cell.value) {
+                         args.push(`${cell.value}`);
+                     }
+                     
+                     if (borders.left) args.push('left=True');
+                     if (borders.top) args.push('top=True');
+                     if (borders.right) args.push('right=True');
+                     if (borders.bottom) args.push('bottom=True');
+                     
+                     line += args.join(',') + ")";
+                     lines.push(line);
+                 }
+             }
+             pythonGrid += lines.join(",\n") + "\n}";
+             console.log('Generated grid:', pythonGrid);
+             return pythonGrid;
+         }
+
+        /* ------------------------------------------------------------
+           PNG rendering (Canvas → data URL)
+           ------------------------------------------------------------ */
+
+        function randChannel() { return Math.floor(50 + Math.random() * 150); }
+        function randColour() { return [randChannel(), randChannel(), randChannel()]; }
+        function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
+        function colourAt(start, end, t) {
+            return `rgb(${lerp(start[0], end[0], t)},${lerp(start[1], end[1], t)},${lerp(start[2], end[2], t)})`;
+        }
+
+        function generateSolutionImage(size, data, solution) {
+            const cellSize = 60;
+            const markerRadius = 24;
+            const pathWidth = markerRadius * 2;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = size * cellSize;
+            canvas.height = size * cellSize;
+            const ctx = canvas.getContext('2d');
+
+            // background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // grid lines
+            ctx.strokeStyle = '#dddddd';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= size; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * cellSize, 0);
+                ctx.lineTo(i * cellSize, canvas.height);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(0, i * cellSize);
+                ctx.lineTo(canvas.width, i * cellSize);
+                ctx.stroke();
+            }
+
+            // walls
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#000000';
+            for (const key in data) {
+                const [r, c] = key.split(',').map(Number);
+                const cell = data[key];
+                const x = c * cellSize;
+                const y = r * cellSize;
+                if (cell.borders.top) {
+                    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cellSize, y); ctx.stroke();
+                }
+                if (cell.borders.bottom) {
+                    ctx.beginPath(); ctx.moveTo(x, y + cellSize); ctx.lineTo(x + cellSize, y + cellSize); ctx.stroke();
+                }
+                if (cell.borders.left) {
+                    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + cellSize); ctx.stroke();
+                }
+                if (cell.borders.right) {
+                    ctx.beginPath(); ctx.moveTo(x + cellSize, y); ctx.lineTo(x + cellSize, y + cellSize); ctx.stroke();
+                }
+            }
+
+            // path gradient
+            if (solution && solution.length > 1) {
+                const startCol = randColour();
+                const endCol = randColour();
+                const centres = solution.map(([r, c]) => [c * cellSize + cellSize / 2, r * cellSize + cellSize / 2]);
+                ctx.lineWidth = pathWidth;
+                ctx.lineCap = 'round';
+                for (let i = 0; i < centres.length - 1; i++) {
+                    const t = centres.length <= 2 ? 0 : i / (centres.length - 2);
+                    ctx.strokeStyle = colourAt(startCol, endCol, t);
+                    ctx.beginPath();
+                    ctx.moveTo(centres[i][0], centres[i][1]);
+                    ctx.lineTo(centres[i + 1][0], centres[i + 1][1]);
+                    ctx.stroke();
+                }
+
+                // joints circles
+                const jointRadius = pathWidth / 2;
+                for (let i = 0; i < centres.length; i++) {
+                    const t = centres.length <= 1 ? 0 : i / (centres.length - 1);
+                    ctx.fillStyle = colourAt(startCol, endCol, t);
+                    ctx.beginPath();
+                    ctx.arc(centres[i][0], centres[i][1], jointRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // numbered markers
+            ctx.font = `${Math.round(markerRadius * 1.4)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (const key in data) {
+                const cell = data[key];
+                if (!cell.value) continue;
+                const [r, c] = key.split(',').map(Number);
+                const cx = c * cellSize + cellSize / 2;
+                const cy = r * cellSize + cellSize / 2;
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(cell.value, cx, cy);
+            }
+
+            return canvas.toDataURL('image/png');
+        }
+
+        // Solve grid event handler
+        document.getElementById('solve-grid').addEventListener('click', function() {
+            const pythonGrid = generatePythonGrid();
+            
+            // Show loading state
+            const spinner = document.getElementById('solve-spinner');
+            spinner.classList.remove('d-none');
+            this.disabled = true;
+            
+            // Hide previous results
+            document.getElementById('solution-info').classList.add('d-none');
+            document.getElementById('error-info').classList.add('d-none');
+
+            // Hide solution image
+            const solutionImg = document.getElementById('solution-image');
+
+            // Run solver in-browser
+            setTimeout(() => {
+                const startTime = performance.now();
+                const solution = solveHamiltonian(GRID_SIZE, gridData);
+                const duration = (performance.now() - startTime).toFixed(1);
+
+                if (solution.length) {
+                    currentSolution = solution;
+                    document.getElementById('solution-message').textContent = `Solved in ${solution.length} steps ( ${duration} ms )`;
+                    document.getElementById('solution-path').textContent = solution.map(coord => `(${coord[0]},${coord[1]})`).join(' → ');
+                    document.getElementById('solution-info').classList.remove('d-none');
+                    renderGrid(); // overlay path
+
+                    // generate PNG and show
+                    try {
+                        const dataUrl = generateSolutionImage(GRID_SIZE, gridData, solution);
+                        solutionImg.src = dataUrl;
+                        solutionImg.style.display = 'block';
+                    } catch (err) {
+                        console.error('PNG generation failed', err);
+                        solutionImg.style.display = 'none';
+                    }
+                } else {
+                    document.getElementById('error-message').textContent = 'No solution found.';
+                    document.getElementById('error-info').classList.remove('d-none');
+                }
+
+                spinner.classList.add('d-none');
+                document.getElementById('solve-grid').disabled = false;
+            }, 50);
+        });
+
+                 // Clear solution event handler
+         document.getElementById('clear-solution').addEventListener('click', function() {
+             currentSolution = null;
+             document.getElementById('solution-info').classList.add('d-none');
+             document.getElementById('error-info').classList.add('d-none');
+             
+             // Hide solution image
+             const solutionImg = document.getElementById('solution-image');
+             solutionImg.style.display = 'none';
+             
+             renderGrid(); // Re-render to clear solution display
+         });
+
+         // Clear entire grid (numbers and walls)
+         document.getElementById('clear-grid').addEventListener('click', function() {
+             if (!confirm('Clear the entire grid?')) return;
+             gridData = createGridData(GRID_SIZE);
+             currentSolution = null;
+             document.getElementById('solution-info').classList.add('d-none');
+             document.getElementById('error-info').classList.add('d-none');
+
+             // Hide solution image
+             const solutionImg = document.getElementById('solution-image');
+             solutionImg.style.display = 'none';
+
+             renderGrid();
+         });
+        
+    </script>
+</body>
+</html>
